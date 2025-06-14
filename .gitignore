@@ -1,0 +1,6 @@
+.env
+__pycache__/
+*.pyc
+*.bat
+main0.py
+delete_webhook.py
