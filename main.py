@@ -6,6 +6,9 @@ import pytz
 from dotenv import load_dotenv
 import logging
 
+WEBHOOK_URL = 'https://kosta-weather-bot.onrender.com'
+
+
 # Настройка логирования
 logging.basicConfig(
     level=logging.INFO,
@@ -143,7 +146,7 @@ def run_webhook():
     from flask import Flask, request
     app = Flask(__name__)
     
-    WEBHOOK_URL = os.getenv('WEBHOOK_URL')
+#   WEBHOOK_URL = os.getenv('WEBHOOK_URL')
     if not WEBHOOK_URL:
         logger.warning("WEBHOOK_URL не указан, используется polling")
         return bot.polling()
