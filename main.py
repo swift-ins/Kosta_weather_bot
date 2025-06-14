@@ -106,8 +106,7 @@ def weather(message):
         cities = [
             ('Москва', 'Europe/Moscow'),
             ('Рига', 'Europe/Riga'),
-            ('Севастополь', 'Europe/Simferopol'),
-            ('Лос Анджелес', 'America/LosAngeles')
+            ('Севастополь', 'Europe/Simferopol')
         ]
         
         weather_data = []
