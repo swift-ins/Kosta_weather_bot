@@ -161,7 +161,7 @@ if USE_WEBHOOK:
         return "Бот работает", 200
 
     # Установка webhook при старте (если нужно)
-    @app.before_first_request
+    @app.before_request
     def set_webhook():
         bot.remove_webhook()
         bot.set_webhook(url=f"{WEBHOOK_URL}/{BOT_TOKEN}")
