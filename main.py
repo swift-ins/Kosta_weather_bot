@@ -1,175 +1,170 @@
 import os
-import telebot
 import requests
 from datetime import datetime, timedelta
-import pytz
 from dotenv import load_dotenv
-import logging
+from flask import Flask, request
+import telebot
 
-WEBHOOK_URL = 'https://kosta-weather-bot.onrender.com'
+# === Список городов ===
+CITIES = ['Москва', 'Севастополь', 'Рига', 'Лос-Анджелес']
 
 
-# Настройка логирования
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-
-# Загрузка переменных окружения
+# === Загрузка .env переменных ===
 load_dotenv()
+API_KEY = os.getenv("API_KEY")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY", '1f30db42752361354d4cf1f02835861e')
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
-# Проверка обязательных переменных
-if not BOT_TOKEN:
-    logger.error("Не указан BOT_TOKEN в переменных окружения!")
-    raise ValueError("Токен бота не найден")
+USE_WEBHOOK = bool(WEBHOOK_URL)  # Если есть URL — значит работаем через webhook
 
-# Создаем экземпляр бота
+# === Инициализация бота ===
 bot = telebot.TeleBot(BOT_TOKEN)
+app = Flask(__name__) if USE_WEBHOOK else None
 
-# Кэш для хранения данных о погоде (упрощенный вариант)
-weather_cache = {}
-CACHE_EXPIRATION = timedelta(minutes=30)
-
-def get_weather(city):
-    """Получение текущей погоды с кэшированием"""
-    cache_key = f"weather_{city}"
-    if cache_key in weather_cache:
-        cached_data = weather_cache[cache_key]
-        if datetime.now() - cached_data['timestamp'] < CACHE_EXPIRATION:
-            return cached_data['temperature']
+# === Функция погоды ===
     
-    url = f"http://api.openweathermap.org/data/2.5/weather?q={city}&appid={OPENWEATHER_API_KEY}&units=metric"
-    try:
-        response = requests.get(url, timeout=10)
-        if response.status_code == 200:
-            data = response.json()
-            temperature = data['main']['temp']
-            weather_cache[cache_key] = {
-                'temperature': temperature,
-                'timestamp': datetime.now()
-            }
-            return temperature
-        logger.warning(f"Ошибка при запросе погоды для {city}: {response.status_code}")
-    except Exception as e:
-        logger.error(f"Ошибка при получении погоды: {str(e)}")
-    return None
+def get_weather_report0(city):
+    output = f"=== {city} ===\n"
 
-def get_forecast(city):
-    """Получение прогноза погоды на завтра"""
-    url = f"http://api.openweathermap.org/data/2.5/forecast?q={city}&appid={OPENWEATHER_API_KEY}&units=metric"
-    try:
-        response = requests.get(url, timeout=10)
-        if response.status_code == 200:
-            data = response.json()
-            tomorrow = datetime.now() + timedelta(days=1)
-            target_time = tomorrow.replace(hour=datetime.now().hour, minute=0, second=0, microsecond=0)
-            
-            for forecast in data['list']:
-                forecast_time = datetime.strptime(forecast['dt_txt'], '%Y-%m-%d %H:%M:%S')
-                if forecast_time.date() == target_time.date() and forecast_time.hour == target_time.hour:
-                    return forecast['main']['temp']
-        logger.warning(f"Ошибка при запросе прогноза для {city}: {response.status_code}")
-    except Exception as e:
-        logger.error(f"Ошибка при получении прогноза: {str(e)}")
-    return None
+    # --- Текущая погода ---
+    weather_url = f"http://api.openweathermap.org/data/2.5/weather?q={city}&appid={API_KEY}&units=metric&lang=ru"
+    weather_resp = requests.get(weather_url).json()
 
-def get_local_time(city_timezone):
-    """Получение локального времени с обработкой ошибок"""
-    try:
-        timezone = pytz.timezone(city_timezone)
-        return datetime.now(timezone).strftime('%Y-%m-%d %H:%M:%S')
-    except Exception as e:
-        logger.error(f"Ошибка получения времени для {city_timezone}: {str(e)}")
-        return "недоступно"
-
-@bot.message_handler(commands=['start'])
-def start(message):
-    """Обработчик команды /start"""
-    bot.reply_to(message, 
-        "Привет! Я могу показать текущее время, температуру и прогноз погоды в разных городах. "
-        "Напишите /w для получения информации или /help для справки.")
-
-@bot.message_handler(commands=['help'])
-def help_command(message):
-    """Обработчик команды /help"""
-    bot.reply_to(message,
-        "Доступные команды:\n"
-        "/start - начать работу с ботом\n"
-        "/w - получить информацию о погоде и времени\n"
-        "/help - показать эту справку")
-
-@bot.message_handler(commands=['w'])
-def weather(message):
-    """Обработчик команды /w - основная логика бота"""
-    try:
-        # Получаем и форматируем данные
-        cities = [
-            ('Москва', 'Europe/Moscow'),
-            ('Рига', 'Europe/Riga'),
-            ('Севастополь', 'Europe/Simferopol')
-        ]
+    if 'main' in weather_resp:
+        desc = weather_resp['weather'][0]['description'].capitalize()
+        temp = weather_resp['main']['temp']
         
-        weather_data = []
-        forecast_data = []
-        
-        for city, timezone in cities:
-            # Время
-            current_time = get_local_time(timezone)
-            
-            # Текущая погода
-            temp = get_weather(city)
-            temp_text = f"{temp}°C" if temp is not None else "недоступно"
-            weather_data.append(f"  - {city}: {current_time}, {temp_text}")
-            
-            # Прогноз
-            forecast = get_forecast(city)
-            if forecast is not None:
-                forecast_data.append(f"  - {city}: {forecast}°C")
-        
-        # Формируем ответ
-        response = (
-            "⏰ Текущее время и температура:\n" +
-            "\n".join(weather_data) +
-            "\n\n🌤 Прогноз на завтра:\n" +
-            ("\n".join(forecast_data) if forecast_data else "данные недоступны"))
-        
-        bot.send_message(message.chat.id, response)
-    except Exception as e:
-        logger.error(f"Ошибка в обработчике weather: {str(e)}")
-        bot.send_message(message.chat.id, "Произошла ошибка при обработке запроса. Пожалуйста, попробуйте позже.")
+        # Местное время
+        timezone_offset = weather_resp.get('timezone', 0)
+        local_time = datetime.utcnow() + timedelta(seconds=timezone_offset)
+        time_str = local_time.strftime('%Y-%m-%d %H:%M')
 
-# Альтернативный запуск для Render
-def run_webhook():
-    from flask import Flask, request
-    app = Flask(__name__)
-    
-#   WEBHOOK_URL = os.getenv('WEBHOOK_URL')
-    if not WEBHOOK_URL:
-        logger.warning("WEBHOOK_URL не указан, используется polling")
-        return bot.polling()
-    
-    @app.route('/webhook', methods=['POST'])
-    def webhook():
-        if request.headers.get('content-type') == 'application/json':
-            json_string = request.get_data().decode('utf-8')
-            update = telebot.types.Update.de_json(json_string)
-            bot.process_new_updates([update])
-            return ''
-        return 'Bad request', 400
-    
-    bot.remove_webhook()
-    bot.set_webhook(url=f"{WEBHOOK_URL}/webhook")
-    
-    port = int(os.getenv('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
-
-if __name__ == "__main__":
-    logger.info("Запуск бота...")
-    # Автоматическое определение способа запуска
-    if os.getenv('RENDER'):
-        run_webhook()
+        output += f"Местное время: {time_str}\n"
+        output += f"Сейчас: {desc}, {temp}°C\n"
     else:
-        bot.polling()
+        return f"{city}: ошибка погоды: {weather_resp.get('message', 'Нет данных')}"
+
+    # --- Прогноз на завтра ---
+    forecast_url = f"http://api.openweathermap.org/data/2.5/forecast?q={city}&appid={API_KEY}&units=metric&lang=ru"
+    forecast_resp = requests.get(forecast_url).json()
+
+    if 'list' in forecast_resp:
+        tomorrow = datetime.utcnow() + timedelta(days=1)
+        tomorrow_str = tomorrow.strftime('%Y-%m-%d')
+
+        output += "Прогноз на завтра:\n"
+        found = False
+        for entry in forecast_resp['list']:
+            if entry['dt_txt'].startswith(tomorrow_str):
+                time = entry['dt_txt'][11:16]
+                desc = entry['weather'][0]['description'].capitalize()
+                temp = entry['main']['temp']
+                output += f"{time} — {desc}, {temp}°C\n"
+                found = True
+
+        if not found:
+            output += "Нет данных на завтра.\n"
+    else:
+        output += "Ошибка прогноза: " + forecast_resp.get('message', 'Нет данных') + "\n"
+
+    return output.strip()
+    
+    
+def get_weather_report(city):
+    output = f"=== {city} ===\n"
+
+    # --- Текущая погода ---
+    weather_url = f"http://api.openweathermap.org/data/2.5/weather?q={city}&appid={API_KEY}&units=metric&lang=ru"
+    weather_resp = requests.get(weather_url).json()
+
+    if 'main' in weather_resp:
+        desc = weather_resp['weather'][0]['description'].capitalize()
+        temp = weather_resp['main']['temp']
+        
+        # Местное время (по timezone из текущей погоды)
+        timezone_offset = weather_resp.get('timezone', 0)
+        local_time = datetime.utcnow() + timedelta(seconds=timezone_offset)
+        time_str = local_time.strftime('%Y-%m-%d %H:%M')
+
+        output += f"Местное время: {time_str}\n"
+        output += f"Сейчас: {desc}, {temp}°C\n"
+    else:
+        return f"{city}: ошибка погоды: {weather_resp.get('message', 'Нет данных')}"
+
+    # --- Прогноз на завтра ---
+    forecast_url = f"http://api.openweathermap.org/data/2.5/forecast?q={city}&appid={API_KEY}&units=metric&lang=ru"
+    forecast_resp = requests.get(forecast_url).json()
+
+    if 'list' in forecast_resp:
+        output += "Прогноз на завтра:\n"
+        found = False
+
+        # Получаем timezone из forecast (если не нашли ранее)
+        timezone_offset = forecast_resp.get('city', {}).get('timezone', timezone_offset)
+
+        # Целевая дата (только год-месяц-день)
+        tomorrow = datetime.utcnow() + timedelta(days=1)
+        tomorrow_date = tomorrow.date()
+
+        for entry in forecast_resp['list']:
+            utc_dt = datetime.utcfromtimestamp(entry['dt'])
+            local_dt = utc_dt + timedelta(seconds=timezone_offset)
+
+            if local_dt.date() == tomorrow_date:
+                time = local_dt.strftime('%H:%M')
+                desc = entry['weather'][0]['description'].capitalize()
+                temp = entry['main']['temp']
+                output += f"{time} — {desc}, {temp}°C\n"
+                found = True
+
+        if not found:
+            output += "Нет данных на завтра.\n"
+    else:
+        output += "Ошибка прогноза: " + forecast_resp.get('message', 'Нет данных') + "\n"
+
+    return output.strip()
+   
+
+
+   
+
+# === Обработка команды /start или /weather ===
+@bot.message_handler(commands=['start', 'weather'])
+def send_weather(message):
+    bot.send_message(message.chat.id, "Получаю данные, подождите...")
+    report = ""
+    for city in CITIES:
+        report += get_weather_report(city) + "\n\n"
+
+    bot.send_message(message.chat.id, report.strip())
+
+# === POLLING режим ===
+
+if not USE_WEBHOOK:
+    print("⚙️  Работает в режиме polling")
+#    bot.remove_webhook()  # <<< Важно!
+    bot.infinity_polling()
+
+
+# === WEBHOOK режим ===
+if USE_WEBHOOK:
+    print(f"🌐 Работает через Webhook: {WEBHOOK_URL}")
+
+    @app.route(f"/{BOT_TOKEN}", methods=['POST'])
+    def webhook():
+        update = telebot.types.Update.de_json(request.stream.read().decode("utf-8"))
+        bot.process_new_updates([update])
+        return "OK", 200
+
+    @app.route("/", methods=["GET"])
+    def index():
+        return "Бот работает", 200
+
+    # Установка webhook при старте (если нужно)
+    @app.before_first_request
+    def set_webhook():
+        bot.remove_webhook()
+        bot.set_webhook(url=f"{WEBHOOK_URL}/{BOT_TOKEN}")
+
+    if __name__ == "__main__":
+        app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
