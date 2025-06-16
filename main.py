@@ -22,7 +22,7 @@ bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
 # === Список городов ===
-CITIES = ['Москва', 'Рига', 'Лос-Анджелес', 'Санкт-Петербург', 'Юрмала', 'Ницца']
+CITIES = ['Москва', 'Рига', 'Лос-Анджелес', 'Санкт-Петербург', 'Ницца']
 
 
 def get_weather_report(city):
@@ -78,7 +78,7 @@ async def handle_start(message: Message):
         try:
             report = get_weather_report(city)
             await message.answer(report)
-            await asyncio.sleep(0.2)
+            await asyncio.sleep(1.2)
         except Exception as e:
             await message.answer(f"Ошибка при получении данных по {city}: {e}")
 
@@ -97,6 +97,14 @@ async def main():
     setup_application(app, dp, bot=bot)
 
     return app
+
+
+#if __name__ == '__main__':
+#    if USE_WEBHOOK:
+#        app = asyncio.run(main())
+#        web.run_app(app, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+#    else:
+#        asyncio.run(dp.start_polling(bot))
 
 
 if __name__ == '__main__':
