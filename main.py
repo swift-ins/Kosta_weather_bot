@@ -99,16 +99,19 @@ async def main():
     return app
 
 
+
 #if __name__ == '__main__':
 #    if USE_WEBHOOK:
-#        app = asyncio.run(main())
-#        web.run_app(app, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
-#    else:
+#        asyncio.run(web._run_app(main(), host="0.0.0.0", port=int(os.environ.get("PORT", 10000))))
+#   else:
 #        asyncio.run(dp.start_polling(bot))
+
 
 
 if __name__ == '__main__':
     if USE_WEBHOOK:
-        asyncio.run(web._run_app(main(), host="0.0.0.0", port=int(os.environ.get("PORT", 10000))))
+        app = asyncio.run(main())
+        web.run_app(app, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
     else:
         asyncio.run(dp.start_polling(bot))
+
