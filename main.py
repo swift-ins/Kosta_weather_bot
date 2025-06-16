@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command, CommandStart
-from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from aiogram.types import Message
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from aiohttp import web
 
@@ -24,12 +24,7 @@ dp = Dispatcher()
 # === Список городов ===
 CITIES = ['Москва', 'Рига', 'Лос-Анджелес', 'Санкт-Петербург', 'Юрмала', 'Ницца']
 
-# === Клавиатура с кнопкой START ===
-start_kb = InlineKeyboardMarkup(inline_keyboard=[
-    [InlineKeyboardButton(text="📍 START", callback_data="get_weather")]
-])
 
-# === Получение прогноза погоды ===
 def get_weather_report(city):
     output = f"=== {city} ===\n"
 
@@ -74,27 +69,10 @@ def get_weather_report(city):
 
     return output.strip()
 
-# === Хендлер /start с кнопкой ===
+
 @dp.message(CommandStart())
-async def handle_start(message: Message):
-    await message.answer("Нажмите кнопку ниже, чтобы получить прогноз погоды:", reply_markup=start_kb)
-
-# === Обработка нажатия на кнопку START ===
-@dp.callback_query(F.data == "get_weather")
-async def process_weather_callback(callback: CallbackQuery):
-    await callback.message.edit_text("Получаю данные, подождите...")
-    for city in CITIES:
-        try:
-            report = get_weather_report(city)
-            await callback.message.answer(report)
-            await asyncio.sleep(0.2)
-        except Exception as e:
-            await callback.message.answer(f"Ошибка при получении данных по {city}: {e}")
-    await callback.answer()
-
-# === Для команды /weather (альтернатива кнопке) ===
 @dp.message(Command("weather"))
-async def handle_weather(message: Message):
+async def handle_start(message: Message):
     await message.answer("Получаю данные, подождите...")
     for city in CITIES:
         try:
@@ -104,10 +82,12 @@ async def handle_weather(message: Message):
         except Exception as e:
             await message.answer(f"Ошибка при получении данных по {city}: {e}")
 
+
 # === WEBHOOK ===
 async def on_startup(bot: Bot):
     if USE_WEBHOOK:
         await bot.set_webhook(f"{WEBHOOK_URL}{WEBHOOK_PATH}")
+
 
 async def main():
     app = web.Application()
@@ -117,6 +97,7 @@ async def main():
     setup_application(app, dp, bot=bot)
 
     return app
+
 
 if __name__ == '__main__':
     if USE_WEBHOOK:
